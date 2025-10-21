@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mis Tickets - Sistema de Tickets</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="navbar-content">
+            <div class="navbar-brand">🎫 Sistema de Tickets</div>
+            <div class="navbar-menu">
+                <a href="dashboard.html">Mis Tickets</a>
+                <a href="create-ticket.html">Crear Ticket</a>
+                <a href="#" id="logout-btn">Cerrar Sesión</a>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <!-- Filtros -->
+        <div class="card">
+            <h2 class="card-title mb-3">Filtrar Tickets</h2>
+            <div class="filters">
+                <div class="filter-item">
+                    <label class="form-label" for="filter-status">Estado</label>
+                    <select id="filter-status" class="form-control">
+                        <option value="">Todos</option>
+                        <option value="abierto">Abierto</option>
+                        <option value="en_progreso">En Progreso</option>
+                        <option value="cerrado">Cerrado</option>
+                    </select>
+                </div>
+                
+                <div class="filter-item">
+                    <label class="form-label" for="filter-priority">Prioridad</label>
+                    <select id="filter-priority" class="form-control">
+                        <option value="">Todas</option>
+                        <option value="alta">Alta</option>
+                        <option value="media">Media</option>
+                        <option value="baja">Baja</option>
+                    </select>
+                </div>
+                
+                <div class="filter-item">
+                    <label class="form-label" for="filter-search">Buscar</label>
+                    <input 
+                        type="text" 
+                        id="filter-search" 
+                        class="form-control" 
+                        placeholder="Buscar en título o descripción..."
+                    >
+                </div>
+            </div>
+            
+            <button id="apply-filters" class="btn btn-primary">Aplicar Filtros</button>
+        </div>
+        
+        <!-- Lista de tickets -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Mis Tickets</h2>
+            </div>
+            
+            <!-- Loading spinner -->
+            <div id="loading" class="spinner"></div>
+            
+            <!-- Mensaje cuando no hay tickets -->
+            <div id="no-tickets" class="hidden text-center text-muted">
+                <p>No tienes tickets creados.</p>
+                <a href="create-ticket.html" class="btn btn-primary mt-2">Crear mi primer ticket</a>
+            </div>
+            
+            <!-- Tabla de tickets -->
+            <div id="tickets-container" class="hidden">
+                <table class="tickets-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Título</th>
+                            <th>Estado</th>
+                            <th>Prioridad</th>
+                            <th>Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tickets-body">
+                        <!-- Los tickets se cargan aquí dinámicamente -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <script src="js/api.js"></script>
+    <script>
+        // Verificar autenticación
+        if (!isAuthenticated()) {
+            window.location.href = 'index.html';
+        }
+        
+        // Logout
+        document.getElementById('logout-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            logout();
+        });
+        
+        // Función para formatear fecha
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('es-MX', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+        
+        // Función para obtener clase de badge según valor
+        function getBadgeClass(type, value) {
+            if (type === 'status') {
+                return `badge badge-${value.replace('_', '-')}`;
+            } else if (type === 'priority') {
+                return `badge badge-${value}`;
+            }
+        }
+        
+        // Función para obtener texto legible
+        function getDisplayText(type, value) {
+            const statusMap = {
+                'abierto': 'Abierto',
+                'en_progreso': 'En Progreso',
+                'cerrado': 'Cerrado'
+            };
+            
+            const priorityMap = {
+                'alta': 'Alta',
+                'media': 'Media',
+                'baja': 'Baja'
+            };
+            
+            if (type === 'status') return statusMap[value] || value;
+            if (type === 'priority') return priorityMap[value] || value;
+            return value;
+        }
+        
+        // Función para cargar tickets
+        async function loadTickets(filters = {}) {
+            const loading = document.getElementById('loading');
+            const noTickets = document.getElementById('no-tickets');
+            const ticketsContainer = document.getElementById('tickets-container');
+            const ticketsBody = document.getElementById('tickets-body');
+            
+            // Mostrar loading
+            loading.classList.remove('hidden');
+            noTickets.classList.add('hidden');
+            ticketsContainer.classList.add('hidden');
+            
+            try {
+                const response = await getMyTickets();
+                const tickets = response.results || response;
+                
+                // Ocultar loading
+                loading.classList.add('hidden');
+                
+                if (tickets.length === 0) {
+                    noTickets.classList.remove('hidden');
+                } else {
+                    ticketsContainer.classList.remove('hidden');
+                    
+                    // Limpiar tabla
+                    ticketsBody.innerHTML = '';
+                    
+                    // Agregar cada ticket
+                    tickets.forEach(ticket => {
+                        const row = document.createElement('tr');
+                        row.onclick = () => {
+                            window.location.href = `ticket-detail.html?id=${ticket.id}`;
+                        };
+                        
+                        row.innerHTML = `
+                            <td>#${ticket.id}</td>
+                            <td>${ticket.title}</td>
+                            <td>
+                                <span class="${getBadgeClass('status', ticket.status)}">
+                                    ${getDisplayText('status', ticket.status)}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="${getBadgeClass('priority', ticket.priority)}">
+                                    ${getDisplayText('priority', ticket.priority)}
+                                </span>
+                            </td>
+                            <td>${formatDate(ticket.created_at)}</td>
+                        `;
+                        
+                        ticketsBody.appendChild(row);
+                    });
+                }
+            } catch (error) {
+                loading.classList.add('hidden');
+                alert('Error al cargar los tickets: ' + error.message);
+            }
+        }
+        
+        // Aplicar filtros
+        document.getElementById('apply-filters').addEventListener('click', () => {
+            const filters = {};
+            
+            const status = document.getElementById('filter-status').value;
+            if (status) filters.status = status;
+            
+            const priority = document.getElementById('filter-priority').value;
+            if (priority) filters.priority = priority;
+            
+            const search = document.getElementById('filter-search').value;
+            if (search) filters.search = search;
+            
+            loadTickets(filters);
+        });
+        
+        // Cargar tickets al iniciar
+        loadTickets();
+    </script>
+</body>
+</html>

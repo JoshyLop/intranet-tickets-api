@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crear Ticket - Sistema de Tickets</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="navbar-content">
+            <div class="navbar-brand">🎫 Sistema de Tickets</div>
+            <div class="navbar-menu">
+                <a href="dashboard.html">Mis Tickets</a>
+                <a href="create-ticket.html">Crear Ticket</a>
+                <a href="#" id="logout-btn">Cerrar Sesión</a>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container-small">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Crear Nuevo Ticket</h2>
+            </div>
+            
+            <!-- Mensaje de éxito -->
+            <div id="success-message" class="alert alert-success hidden"></div>
+            
+            <!-- Mensaje de error -->
+            <div id="error-message" class="alert alert-error hidden"></div>
+            
+            <!-- Formulario -->
+            <form id="create-ticket-form">
+                <div class="form-group">
+                    <label class="form-label" for="title">
+                        Título del Problema <span style="color: red;">*</span>
+                    </label>
+                    <input 
+                        type="text" 
+                        id="title" 
+                        class="form-control" 
+                        placeholder="Ej: La impresora no funciona"
+                        required
+                        minlength="5"
+                    >
+                    <small class="text-muted">Mínimo 5 caracteres</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="description">
+                        Descripción Detallada <span style="color: red;">*</span>
+                    </label>
+                    <textarea 
+                        id="description" 
+                        class="form-control" 
+                        placeholder="Describe el problema con el mayor detalle posible..."
+                        required
+                        minlength="10"
+                    ></textarea>
+                    <small class="text-muted">Mínimo 10 caracteres. Incluye toda la información relevante.</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="priority">
+                        Prioridad <span style="color: red;">*</span>
+                    </label>
+                    <select id="priority" class="form-control" required>
+                        <option value="">Selecciona una prioridad</option>
+                        <option value="baja">🟢 Baja - Puede esperar varios días</option>
+                        <option value="media">🟡 Media - Importante pero no urgente</option>
+                        <option value="alta">🔴 Alta - Requiere atención inmediata</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="assigned_to">
+                        Asignar a (Opcional)
+                    </label>
+                    <select id="assigned_to" class="form-control">
+                        <option value="">Sin asignar - Se asignará automáticamente</option>
+                        <!-- Los usuarios se cargan dinámicamente -->
+                    </select>
+                    <small class="text-muted">Puedes dejar sin asignar y el equipo de soporte lo asignará.</small>
+                </div>
+                
+                <div style="display: flex; gap: 1rem;">
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">
+                        Crear Ticket
+                    </button>
+                    <a href="dashboard.html" class="btn btn-secondary">
+                        Cancelar
+                    </a>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Información adicional -->
+        <div class="card">
+            <h3 style="margin-bottom: 1rem;">💡 Consejos para crear un buen ticket</h3>
+            <ul style="padding-left: 1.5rem; color: #666;">
+                <li>Sé específico en el título (❌ "No funciona" → ✅ "La impresora del piso 2 no imprime")</li>
+                <li>Incluye todos los detalles posibles en la descripción</li>
+                <li>Menciona qué intentaste hacer antes de reportar</li>
+                <li>Si es un error, describe los pasos para reproducirlo</li>
+                <li>Indica la urgencia real del problema</li>
+            </ul>
+        </div>
+    </div>
+    
+    <script src="js/api.js"></script>
+    <script>
+        // Verificar autenticación
+        if (!isAuthenticated()) {
+            window.location.href = 'index.html';
+        }
+        
+        // Logout
+        document.getElementById('logout-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            logout();
+        });
+        
+        // Cargar lista de usuarios para asignar
+        async function loadUsers() {
+            try {
+                const users = await getUsers();
+                const select = document.getElementById('assigned_to');
+                
+                users.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.id;
+                    option.textContent = `${user.first_name} ${user.last_name} (${user.username})` || user.username;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error al cargar usuarios:', error);
+            }
+        }
+        
+        // Manejar envío del formulario
+        document.getElementById('create-ticket-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const successDiv = document.getElementById('success-message');
+            const errorDiv = document.getElementById('error-message');
+            successDiv.classList.add('hidden');
+            errorDiv.classList.add('hidden');
+            
+            // Obtener datos del formulario
+            const title = document.getElementById('title').value.trim();
+            const description = document.getElementById('description').value.trim();
+            const priority = document.getElementById('priority').value;
+            const assigned_to = document.getElementById('assigned_to').value;
+            
+            // Validaciones adicionales
+            if (title.length < 5) {
+                errorDiv.textContent = 'El título debe tener al menos 5 caracteres';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+            
+            if (description.length < 10) {
+                errorDiv.textContent = 'La descripción debe tener al menos 10 caracteres';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+            
+            // Preparar datos
+            const ticketData = {
+                title,
+                description,
+                priority
+            };
+            
+            // Agregar assigned_to solo si se seleccionó
+            if (assigned_to) {
+                ticketData.assigned_to = parseInt(assigned_to);
+            }
+            
+            // Deshabilitar botón
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Creando ticket...';
+            
+            try {
+                const newTicket = await createTicket(ticketData);
+                
+                // Mostrar mensaje de éxito
+                successDiv.textContent = `¡Ticket #${newTicket.id} creado exitosamente!`;
+                successDiv.classList.remove('hidden');
+                
+                // Limpiar formulario
+                e.target.reset();
+                
+                // Redirigir después de 2 segundos
+                setTimeout(() => {
+                    window.location.href = `ticket-detail.html?id=${newTicket.id}`;
+                }, 2000);
+                
+            } catch (error) {
+                errorDiv.textContent = 'Error al crear el ticket: ' + error.message;
+                errorDiv.classList.remove('hidden');
+                
+                // Rehabilitar botón
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Crear Ticket';
+            }
+        });
+        
+        // Cargar usuarios al iniciar
+        loadUsers();
+    </script>
+</body>
+</html>

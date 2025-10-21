@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detalle del Ticket - Sistema de Tickets</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="navbar-content">
+            <div class="navbar-brand">🎫 Sistema de Tickets</div>
+            <div class="navbar-menu">
+                <a href="dashboard.html">Mis Tickets</a>
+                <a href="create-ticket.html">Crear Ticket</a>
+                <a href="#" id="logout-btn">Cerrar Sesión</a>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <!-- Loading -->
+        <div id="loading" class="spinner"></div>
+        
+        <!-- Contenido del ticket -->
+        <div id="ticket-content" class="hidden">
+            <!-- Información del ticket -->
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+                    <div>
+                        <h2 class="card-title" id="ticket-title"></h2>
+                        <p class="text-muted" id="ticket-meta"></p>
+                    </div>
+                    <div style="text-align: right;">
+                        <span id="ticket-status-badge"></span>
+                        <span id="ticket-priority-badge"></span>
+                    </div>
+                </div>
+                
+                <div id="ticket-description" style="margin-bottom: 1.5rem; line-height: 1.8;"></div>
+                
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 200px;">
+                        <strong>Creado por:</strong>
+                        <span id="created-by"></span>
+                    </div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <strong>Asignado a:</strong>
+                        <span id="assigned-to"></span>
+                    </div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <strong>Días abierto:</strong>
+                        <span id="days-open"></span>
+                    </div>
+                </div>
+                
+                <!-- Botones de acción -->
+                <div style="margin-top: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap;" id="action-buttons">
+                    <!-- Se agregan dinámicamente -->
+                </div>
+            </div>
+            
+            <!-- Comentarios -->
+            <div class="card">
+                <h3 class="card-title mb-3">💬 Comentarios</h3>
+                
+                <div id="comments-list">
+                    <!-- Los comentarios se cargan aquí -->
+                </div>
+                
+                <!-- Mensaje cuando no hay comentarios -->
+                <div id="no-comments" class="hidden text-center text-muted">
+                    <p>No hay comentarios aún. Sé el primero en comentar.</p>
+                </div>
+                
+                <!-- Formulario para agregar comentario -->
+                <div style="margin-top: 2rem; padding-top: 2rem; border-top: 1px solid #e5e7eb;">
+                    <h4 style="margin-bottom: 1rem;">Agregar Comentario</h4>
+                    
+                    <div id="comment-error" class="alert alert-error hidden"></div>
+                    <div id="comment-success" class="alert alert-success hidden"></div>
+                    
+                    <form id="comment-form">
+                        <div class="form-group">
+                            <textarea 
+                                id="comment-content" 
+                                class="form-control" 
+                                placeholder="Escribe tu comentario aquí..."
+                                required
+                                minlength="3"
+                            ></textarea>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">
+                            Enviar Comentario
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="js/api.js"></script>
+    <script>
+        // Verificar autenticación
+        if (!isAuthenticated()) {
+            window.location.href = 'index.html';
+        }
+        
+        // Logout
+        document.getElementById('logout-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            logout();
+        });
+        
+        // Obtener ID del ticket de la URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const ticketId = urlParams.get('id');
+        
+        if (!ticketId) {
+            alert('ID de ticket no válido');
+            window.location.href = 'dashboard.html';
+        }
+        
+        let currentTicket = null;
+        
+        // Función para formatear fecha
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('es-MX', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        
+        // Función para obtener clase de badge
+        function getBadgeClass(type, value) {
+            if (type === 'status') {
+                return `badge badge-${value.replace('_', '-')}`;
+            } else if (type === 'priority') {
+                return `badge badge-${value}`;
+            }
+        }
+        
+        // Función para obtener texto legible
+        function getDisplayText(type, value) {
+            const statusMap = {
+                'abierto': 'Abierto',
+                'en_progreso': 'En Progreso',
+                'cerrado': 'Cerrado'
+            };
+            
+            const priorityMap = {
+                'alta': '🔴 Alta',
+                'media': '🟡 Media',
+                'baja': '🟢 Baja'
+            };
+            
+            if (type === 'status') return statusMap[value] || value;
+            if (type === 'priority') return priorityMap[value] || value;
+            return value;
+        }
+        
+        // Cargar ticket
+        async function loadTicket() {
+            try {
+                currentTicket = await getTicket(ticketId);
+                
+                // Llenar información
+                document.getElementById('ticket-title').textContent = currentTicket.title;
+                document.getElementById('ticket-meta').textContent = 
+                    `Ticket #${currentTicket.id} • Creado el ${formatDate(currentTicket.created_at)}`;
+                document.getElementById('ticket-description').textContent = currentTicket.description;
+                
+                // Badges
+                const statusBadge = document.getElementById('ticket-status-badge');
+                statusBadge.className = getBadgeClass('status', currentTicket.status);
+                statusBadge.textContent = getDisplayText('status', currentTicket.status);
+                
+                const priorityBadge = document.getElementById('ticket-priority-badge');
+                priorityBadge.className = getBadgeClass('priority', currentTicket.priority);
+                priorityBadge.textContent = getDisplayText('priority', currentTicket.priority);
+                
+                // Información adicional
+                document.getElementById('created-by').textContent = 
+                    currentTicket.created_by?.username || 'Desconocido';
+                document.getElementById('assigned-to').textContent = 
+                    currentTicket.assigned_to?.username || 'Sin asignar';
+                document.getElementById('days-open').textContent = 
+                    currentTicket.days_open + ' días';
+                
+                // Botones de acción
+                renderActionButtons();
+                
+                // Ocultar loading y mostrar contenido
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('ticket-content').classList.remove('hidden');
+                
+                // Cargar comentarios
+                loadComments();
+                
+            } catch (error) {
+                alert('Error al cargar el ticket: ' + error.message);
+                window.location.href = 'dashboard.html';
+            }
+        }
+        
+        // Renderizar botones de acción
+        function renderActionButtons() {
+            const buttonsDiv = document.getElementById('action-buttons');
+            buttonsDiv.innerHTML = '';
+            
+            if (currentTicket.status !== 'cerrado') {
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'btn btn-success';
+                closeBtn.textContent = '✅ Cerrar Ticket';
+                closeBtn.onclick = handleCloseTicket;
+                buttonsDiv.appendChild(closeBtn);
+            }
+            
+            const backBtn = document.createElement('a');
+            backBtn.href = 'dashboard.html';
+            backBtn.className = 'btn btn-secondary';
+            backBtn.textContent = '← Volver a Mis Tickets';
+            buttonsDiv.appendChild(backBtn);
+        }
+        
+        // Cerrar ticket
+        async function handleCloseTicket() {
+            if (!confirm('¿Estás seguro de que quieres cerrar este ticket?')) {
+                return;
+            }
+            
+            try {
+                await closeTicket(ticketId);
+                alert('Ticket cerrado exitosamente');
+                loadTicket(); // Recargar para actualizar
+            } catch (error) {
+                alert('Error al cerrar el ticket: ' + error.message);
+            }
+        }
+        
+        // Cargar comentarios
+        async function loadComments() {
+            try {
+                const comments = await getComments(ticketId);
+                const commentsList = document.getElementById('comments-list');
+                const noComments = document.getElementById('no-comments');
+                
+                if (comments.length === 0) {
+                    commentsList.innerHTML = '';
+                    noComments.classList.remove('hidden');
+                } else {
+                    noComments.classList.add('hidden');
+                    commentsList.innerHTML = '';
+                    
+                    comments.forEach(comment => {
+                        const commentDiv = document.createElement('div');
+                        commentDiv.className = 'comment';
+                        commentDiv.innerHTML = `
+                            <div class="comment-header">
+                                <span class="comment-author">${comment.author?.username || 'Desconocido'}</span>
+                                <span>${formatDate(comment.created_at)}</span>
+                            </div>
+                            <div class="comment-content">${comment.content}</div>
+                        `;
+                        commentsList.appendChild(commentDiv);
+                    });
+                }
+            } catch (error) {
+                console.error('Error al cargar comentarios:', error);
+            }
+        }
+        
+        // Manejar envío de comentario
+        document.getElementById('comment-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const errorDiv = document.getElementById('comment-error');
+            const successDiv = document.getElementById('comment-success');
+            errorDiv.classList.add('hidden');
+            successDiv.classList.add('hidden');
+            
+            const content = document.getElementById('comment-content').value.trim();
+            
+            if (content.length < 3) {
+                errorDiv.textContent = 'El comentario debe tener al menos 3 caracteres';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+            
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Enviando...';
+            
+            try {
+                await createComment({
+                    ticket: parseInt(ticketId),
+                    content: content,
+                    is_internal: false
+                });
+                
+                successDiv.textContent = '¡Comentario agregado exitosamente!';
+                successDiv.classList.remove('hidden');
+                
+                // Limpiar formulario
+                document.getElementById('comment-content').value = '';
+                
+                // Recargar comentarios
+                setTimeout(() => {
+                    successDiv.classList.add('hidden');
+                    loadComments();
+                }, 1500);
+                
+            } catch (error) {
+                errorDiv.textContent = 'Error al agregar comentario: ' + error.message;
+                errorDiv.classList.remove('hidden');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Enviar Comentario';
+            }
+        });
+        
+        // Cargar ticket al iniciar
+        loadTicket();
+    </script>
+</body>
+</html>
